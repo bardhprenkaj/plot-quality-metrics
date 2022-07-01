@@ -1,0 +1,11 @@
+{
+    "marker_size": 1,
+    "figsize": [7.00, 3.50],
+    "autolayout": true,
+    "id1": "x",
+    "id2": "y",
+    "default_height": 500,
+    "default_width": 700,
+    "kernel_sa": 8,
+    "delta_sa": 0.32
+}
