@@ -1,6 +1,7 @@
 from utils.datareader.plot_reader import PlotReader
 from utils.datawriter.plot_writer import PlotWriter
 from metrics.perceptual.scatter.scatterplot import ScatterPlot
+from metrics.perceptual.scatter.scagnostics.diagnostics import ScatterPlotDiagnostics
 
 if __name__ == '__main__':
 
@@ -19,3 +20,15 @@ if __name__ == '__main__':
 
     print(f'bank_slopes_ms = {scatter_plt.bank_slopes()}')
     print(f'bank_slopes_avg = {scatter_plt.bank_slopes(method="avg")}')
+
+    print(f'shape={data_coords.shape}')
+    data_coords.drop_duplicates(subset=['x','y'], keep='first', inplace=True)
+    print(f'shape={data_coords.shape}')
+    scagnostic_plt = ScatterPlotDiagnostics(data_coords)
+    scagnostics = scagnostic_plt.compute()
+
+
+    print(scagnostics[0].bdata.point1)
+    print(scagnostics[0].bdata.point2)
+    print(scagnostics[0].bdata.count)
+
