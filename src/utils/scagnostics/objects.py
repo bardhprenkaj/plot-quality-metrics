@@ -1,4 +1,5 @@
 from curses.ascii import NUL
+from stat import FILE_ATTRIBUTE_SPARSE_FILE
 from pyparsing import null_debug_action
 from environment.envconfig import Configuration
 import math
@@ -480,10 +481,11 @@ class Sort:
         for i in range(len(sort_order)):
             sort_order[i] = i
         x[from_index:to_index] = sorted(x[from_index:to_index])
-        #####
+        ##### da sistemare
     
     def rank(self, a):
         n = len(a)
+        ranks = [None] * n
         index = self.indexed_double_array_sort(a, 0, n)
         lind = index[0]
         am = a[lind]
@@ -499,6 +501,29 @@ class Sort:
             if(not math.isnan(am)):
                 freq = 1.0
                 kms += int(freq)
+                if(freq> 1.0):
+                    ak += 0.5 * (freq - 1.0)
+                    k1 = k
+                    k2 = k
+                elif (a[kind] == am):
+                    k2 = k
+                    ak += 0.5
+                    if(k< n-1):
+                        insert = False
+                
+                if(insert):
+                    for l in range(k1, k2):
+                        lind = index[l]
+                        ranks[lind] = ak
+                    if(k2 != n -1 and k == n-1):
+                        ranks[kind] = kms
+            if(insert):
+                k1 = k
+                k2 = k
+                ak = kms
+                am = a[kind]
+        return ranks
+
                 
         
 class Scagnostic:
