@@ -107,33 +107,35 @@ class Node:
     
     def get_neighbor_iterator(self):
         return self.neighbors
+    
+    def shortest_edge(self, mst):
+        emin = None
+        if(self.neighbors != None):
+            DOUBLE_MAX = 1.7976931348623158E+308 
+            for edge in self.neighbors:
+                e =  Edge(edge)
+                if( mst or e == self.neighbors[-1]):
+                    wt = e.weight
+                    if( wt < DOUBLE_MAX):
+                        wmin = wt
+                        emin = e
+        return emin
+
+
+    def get_MST_Children(self,cutoff, max_lenght):
+        count = 0
+        if(self.visited):
+            return count
+        self.isVisited = True
+
+        for edge in self.neighbors:
+            e =  Edge(edge)
+            if(e.onMST and e.weight < cutoff and not e.otherNode(this).isVisited):
+                if():
 
 
 
-    protected Edge shortestEdge(boolean mst) {
-        Edge emin = null;
-        if (neighbors != null) {
-            Iterator it = neighbors.iterator();
-            double wmin = Double.MAX_VALUE;
-            while (it.hasNext()) {
-                Edge e = (Edge) it.next();
-                if (mst || !e.otherNode(this).onMST) {
-                    double wt = e.weight;
-                    if (wt < wmin) {
-                        wmin = wt;
-                        emin = e;
-                    }
-                }
-            }
-        }
-        return emin;
-    }
-
-    protected int getMSTChildren(double cutoff, double[] maxLength) {
-        int count = 0;
-        if (isVisited)
-            return count;
-        isVisited = true;
+   
         Iterator it = neighbors.iterator();
         while (it.hasNext()) {
             Edge e = (Edge) it.next();
