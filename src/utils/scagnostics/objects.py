@@ -1,3 +1,5 @@
+from curses.ascii import NUL
+from pyparsing import null_debug_action
 from environment.envconfig import Configuration
 import math
 
@@ -81,6 +83,79 @@ class Binner:
                 k += 1
 
         return k
+
+
+class Node:
+
+    def __init__(self, x, y, count, point1D):
+        self.x = x
+        self.y = y
+        self.count = count
+        self.point1D  = point1D
+        self.anEdge = None
+        self.neighbors = list()
+        self.onHull = False
+        self.isVisited = False
+
+    def dist_to_node(self, px, py):
+        dx = px - self.x
+        dy = py - self.y
+        return math.sqrt(( dx**2 + dy**2))
+
+    def set_neighbor(self, neighbor):
+        self.neighbors.append(neighbor)
+    
+    def get_neighbor_iterator(self):
+        return self.neighbors
+
+
+
+    protected Edge shortestEdge(boolean mst) {
+        Edge emin = null;
+        if (neighbors != null) {
+            Iterator it = neighbors.iterator();
+            double wmin = Double.MAX_VALUE;
+            while (it.hasNext()) {
+                Edge e = (Edge) it.next();
+                if (mst || !e.otherNode(this).onMST) {
+                    double wt = e.weight;
+                    if (wt < wmin) {
+                        wmin = wt;
+                        emin = e;
+                    }
+                }
+            }
+        }
+        return emin;
+    }
+
+    protected int getMSTChildren(double cutoff, double[] maxLength) {
+        int count = 0;
+        if (isVisited)
+            return count;
+        isVisited = true;
+        Iterator it = neighbors.iterator();
+        while (it.hasNext()) {
+            Edge e = (Edge) it.next();
+            if (e.onMST) {
+                if (e.weight < cutoff) {
+                    if (!e.otherNode(this).isVisited) {
+                        count += e.otherNode(this).getMSTChildren(cutoff, maxLength);
+                        double el = e.weight;
+                        if (el > maxLength[0])
+                            maxLength[0] = el;
+                    }
+                }
+            }
+        }
+        count += this.count; // add count for this node
+        return count;
+    }
+
+
+
+
+
 
 
 class Scagnostic:
