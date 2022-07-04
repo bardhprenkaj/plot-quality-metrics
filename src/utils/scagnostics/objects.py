@@ -2,6 +2,7 @@ from curses.ascii import NUL
 from pyparsing import null_debug_action
 from environment.envconfig import Configuration
 import math
+import numpy as np
 
 class BinnedData:
 
@@ -84,6 +85,156 @@ class Binner:
 
         return k
 
+class Triangle:
+
+    def __init__(self, e1, e2, e3):
+        self.edge = None
+        self.centre_x = None
+        self.centre_y = None
+        self.radius = None
+        self.on_complex = True
+
+        self.update(e1, e2, e3)
+
+
+    def update(self, e1, e2, e3):
+        edge = e1
+        e1.set_next_edge(e2)
+        e2.set_next_edge(e3)
+        e3.set_next_edge(e1)
+
+        e1.set_triangle(self)
+        e2.set_triangle(self)
+        e3.set_triangle(self)
+
+        self.find_circle(self)
+
+    def find_circle(self):
+        pass
+
+    def in_circle(self, node):
+        return node.dist_to_node(self.centre_x, self.centre_y) < self.radius
+
+    def remove_edges(self, edges):
+        edges.remove(self.edge)
+        edges.remove(self.edge.next_edge)
+        edges.remove(self.edge.next_edge.next_edge)
+
+class Edge:
+
+    def __init__(self, node1, node2):
+        self.node1 = node1
+        self.node2 = node2
+
+        self.next_edge = None
+        self.inverse_edge = None
+        self.next_convect_hull_link = None
+
+        self.triangle = None
+
+        self.a, self.b, self.c = (0,0,0)
+
+        self.on_hull = False
+        self.on_mst = False
+        self.on_shape = False
+        self.on_outlier = False
+
+        self.update(node1, node2)
+
+    def set_next_edge(self, next_edge):
+        self.next_edge = next_edge
+
+    def set_triangle(self, triangle):
+        self.triangle = triangle
+
+    def update(self, node1, node2):
+        self.node1 = node1
+        self.node2 = node2
+
+        self.a = node2.y - node1.y
+        self.b = node1.x - node2.x
+        self.c = node2.x * node1.y - node1.x * node2.y
+
+        self.weight = math.sqrt(self.a * self.a + self.b * self.b)
+
+        self.as_index()
+
+    def as_index(self):
+        self.node1.edge = self
+
+    def make_symm(self):
+        edge = Edge(self.node2, self.node1)
+        self.link_symm(edge)
+        return edge
+
+    def link_symm(self, edge):
+        self.inverse_edge = edge
+        if edge:
+            edge.inverse_edge = self 
+
+    def on_side(self, node):
+        s = self.a * node.x + self.b * node.y + c
+        if s > 0:
+            return 1
+        if s < 0:
+            return -1
+        return 0
+
+    def most_left(self):
+        e = self
+        ee = self
+        ee = e.next_edge.next_edge.inverse_edge
+        while ee and not self.is_equal(ee):
+            e = ee
+        return e.next_edge.next_edge
+
+    def most_right(self):
+        e = self
+        ee = self
+        ee = e.inverse_edge.next_edge
+        while e.inverse_edge and ee:
+            e = ee
+        return e
+
+    def delete_simplex(self):
+        on_shape = False
+        self.triangle.on_complex = False
+        if self.inverse_edge:
+            self.inverse_edge.on_shape = False
+            self.inverse_edge.triangle.on_complex = False
+
+
+    def is_equal(self, other):
+        return other.node1.x == self.node1.x and other.node2.x == self.node2.x and other.node1.y == self.node1.y and other.node2.y == self.node2.y
+
+    def is_equivalent(self, other):
+        return self.is_equal(other) and (other.node1.x == self.node2.x and other.node1.y == self.node2.y and other.node2.x == self.node1.x and other.node2.y == self.node1.y)
+
+    def other_node(self, n):
+        return self.node2 if n.equals(self.node1) else self.node1
+
+    def is_new_edge(self, n):
+        for edge in n.neighbors:
+            if self.is_equivalent(edge):
+                return False
+        return True
+
+    def get_runts(self, max_length):
+        max_length1 = 0
+        max_length2 = 0
+
+        count1 = self.node1.get_MST_Children(self.weight, max_length1)
+        count2 = self.node2.get_MST_Children(self.weight, max_length2)
+
+        if count1 < count2:
+            max_length[0] = max_length1
+            return count1
+        elif count1 == count2:
+            max_length2 = max_length1 if max_length1 < max_length2 else max_length2
+            return count1
+        else:
+            max_length[0] = max_length2
+            return count2
 
 class Node:
 
@@ -96,6 +247,8 @@ class Node:
         self.neighbors = list()
         self.onHull = False
         self.isVisited = False
+
+        self.env_config = Configuration('res/config.json')
 
     def dist_to_node(self, px, py):
         dx = px - self.x
@@ -110,42 +263,200 @@ class Node:
     
     def shortest_edge(self, mst):
         emin = None
-        if(self.neighbors != None):
-            DOUBLE_MAX = 1.7976931348623158E+308 
+        wmin = self.env_config.get_property("double_max")
+        if self.neighbors:
             for edge in self.neighbors:
-                e =  Edge(edge)
-                if( mst or not e.otherNode(self).onMST):
-                    wt = e.weight
-                    if( wt < DOUBLE_MAX):
+                if mst or edge.is_equal(self.neighbors[-1]):
+                    wt = edge.weight
+                    if wt < wmin:
                         wmin = wt
-                        emin = e
+                        emin = edge
         return emin
 
 
-    def get_MST_Children(self,cutoff, max_lenght):
+    def get_MST_Children(self, cutoff, max_length):
         count = 0
-        if(self.visited):
+        if(self.isVisited):
             return count
         self.isVisited = True
 
-        for edge in self.neighbors:
-            e =  Edge(edge)
-            if(e.onMST and e.weight < cutoff and not e.otherNode(self).isVisited):
-                count += e.otherNode(self).getMSTChildren(cutoff, max_lenght)
+        for e in self.neighbors:
+            if(e.on_mst and e.weight < cutoff and not e.other_node(self).isVisited):
+                count += e.other_node(self).get_MST_Children(cutoff, max_lenght)
                 el = e.weight
-                if(el > max_lenght[0]):
-                    max_lenght[0] = el
+                if(el > max_length[0]):
+                    max_length[0] = el
 
         count += self.count
         return count
 
 
+class Cluster:
+
+    def __init__(self, num_clusters, num_iterations):
+        self.members = np.array(list())
+        self.n_var = None
+        self.n_row = None
+        self.num_clusters = 0
+        self.num_iterations = 3
+
+        if num_iterations != 0:
+            self.num_iterations = num_iterations
+
+        if num_clusters != 0:
+            self.num_clusters = num_clusters
 
 
+    def compute(self, data):
+        def init_array(x, y):
+            return np.array([np.array([0] * x)] * y)
+
+        self.n_row, self.n_var = data.shape
 
 
+        use_stopping_rule = False
+        
+        ssr = list()
+        if self.num_clusters == 0:
+            use_stopping_rule = True
+            self.num_clusters = 25
+            ssr = init_array(self.n_var, self.num_clusters)
 
 
+        center = init_array(self.n_var, self.num_clusters)
+        count = init_array(self.n_var, self.num_clusters)
+        mean = init_array(self.n_var, self.num_clusters)
+        min_ = init_array(self.n_var, self.num_clusters)
+        max_ = init_array(self.n_var, self.num_clusters)
+        ssq = init_array(self.n_var, self.num_clusters)
+        closest_points = [0] * self.num_clusters
+        closest_distances = [0] * self.num_clusters
+
+        self.members = np.array([0] * self.n_row)
+        mem = np.array([0] * self.n_row)
+
+
+        for k in range(self.num_clusters):
+
+            for iter in range(self.num_iterations):
+
+                reassigned = False
+
+                for l in range(k):
+                    for j in range(self.n_var):
+                        if iter == 0 or center[l][j] != mean[l][j]:
+                            self.reassign(k, data, center, count, mean, min_, max_, ssq, closest_points, closest_distances)
+                            reassigned = True
+                            break
+                if reassigned:
+                    break
+            
+            if not reassigned or k == 0:
+                break
+
+
+            if use_stopping_rule:
+                ssq1, ssq2 = (0,0)
+                for j in range(self.n_var):
+                    for l in range(k):
+                        ssq1 += ssr[l][j]
+                        ssq2 += ssq[l][j]
+                        ssr[l][j] = ssq[l][j]
+
+                pre = (ssq1 - ssq2) / ssq1
+                if pre > 0 and pre < .1:
+                    self.num_clusters = k
+                    self.reassign(k, data, center, count, mean, min_, max_, ssq, closest_points, closest_distances)
+                    mem[0:self.n_row] = self.members[0:self.n_row]
+                    break
+                else:
+                    self.members[0:self.n_row] = mem[0:self.n_row]
+
+
+            if k < (self.num_clusters - 1):
+                kn, dmax, jm, km, cutpoint = (k + 1, 0, 0, 0, 0)
+                for l in range(k):
+                    for j in range(self.n_var):
+                        dm = max_[l][j] - min_[l][j]
+                        if dm > dmax:
+                            cutpoint = mean[l][j]
+                            dmax = dm
+                            jm = j
+                            km = l
+                for i in range(self.n_row):
+                    if self.members[i] == km and data[i][jm] > cutpoint:
+                        for j in range(self.n_var):
+                            count[km][j] -= 1
+                            count[kn][j] += 1
+                            mean[km][j] += (data[i][j] - mean[km][j]) / count[km][j]
+                            mean[kn][j] += (data[i][j] - mean[kn][j]) / count[kn][j]
+
+        nc, cutoff = 0, .1
+        for k in range(self.num_clusters):
+            if (count[k][0] / self.n_row) > cutoff:
+                nc += 1
+
+        exemplars = [0] * nc
+        nc = 0
+        for k in range(self.num_clusters):
+            if (count[k][0] / self.n_row) > cutoff:
+                exemplars[nc] = closest_points[k]
+                nc += 1
+
+        return exemplars
+
+
+    def reassign(self, num_clusters, data, center, count, mean, min_, max_, ssq, closest_points, closest_distances):
+
+        for k in range(num_clusters):
+            closest_points[k] = -1
+            closest_distances[k] = float('inf')
+            for j in range(self.n_var):
+                center[k][j] = mean[k][j]
+                mean[k][j] = 0
+                count[k][j] = 0
+                ssq[k][j] = 0
+                min_[k][j] = float('inf')
+                max_[k][j] = float('-inf')
+
+        for i in range(self.n_row):
+            dmin = float('inf')
+            kmin = -1
+            for k in range(num_clusters):
+                dd = self.distance(data[i], center[k])
+                if dd < dmin:
+                    dmin = dd
+                    kmin = k
+                    if dmin < closest_distances[k]:
+                        closest_distances[k] = dmin
+                        closest_points[k] = i
+
+            if kmin < 0:
+                self.members[i] = -1
+            else:
+                self.members[i] = kmin
+
+            
+            for j in range(self.n_var):
+                if data[i][j]:
+                    count[kmin][j] += 1
+                    xn = count[kmin][j]
+                    xa = data[i][j]
+                    mean[kmin][j] += (xa - mean[kmin][j]) / xn
+
+                    if xn > 1:
+                        ssq[kmin][j] += xn * (xa - mean[kmin][j]) * (xa - mean[kmin][j]) / (xn - 1)
+                    if min_[kmin][j] > xa:
+                        min_[kmin][j] = xa
+                    if max_[kmin][j] < xa:
+                        max_[kmin][j] = xa
+
+
+    def distance(self, a, b):
+        dist = 0
+        for i in range(len(a)):
+            dist += (a[i] - b[i]) * (a[i] - b[i])
+        return dist
 
 class Sort:
 
@@ -189,16 +500,7 @@ class Sort:
                 freq = 1.0
                 kms += int(freq)
                 
-
- 
         
-
-            
-
-
-
-
-
 class Scagnostic:
 
     def __init__(self, point1, point2, num_bins, max_bins):
