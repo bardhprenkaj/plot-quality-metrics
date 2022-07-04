@@ -114,7 +114,7 @@ class Node:
             DOUBLE_MAX = 1.7976931348623158E+308 
             for edge in self.neighbors:
                 e =  Edge(edge)
-                if( mst or e == self.neighbors[-1]):
+                if( mst or not e.otherNode(self).onMST):
                     wt = e.weight
                     if( wt < DOUBLE_MAX):
                         wmin = wt
@@ -130,29 +130,16 @@ class Node:
 
         for edge in self.neighbors:
             e =  Edge(edge)
-            if(e.onMST and e.weight < cutoff and not e.otherNode(this).isVisited):
-                if():
+            if(e.onMST and e.weight < cutoff and not e.otherNode(self).isVisited):
+                count += e.otherNode(self).getMSTChildren(cutoff, max_lenght)
+                el = e.weight
+                if(el > max_lenght[0]):
+                    max_lenght[0] = el
+
+        count += self.count
+        return count
 
 
-
-   
-        Iterator it = neighbors.iterator();
-        while (it.hasNext()) {
-            Edge e = (Edge) it.next();
-            if (e.onMST) {
-                if (e.weight < cutoff) {
-                    if (!e.otherNode(this).isVisited) {
-                        count += e.otherNode(this).getMSTChildren(cutoff, maxLength);
-                        double el = e.weight;
-                        if (el > maxLength[0])
-                            maxLength[0] = el;
-                    }
-                }
-            }
-        }
-        count += this.count; // add count for this node
-        return count;
-    }
 
 
 
