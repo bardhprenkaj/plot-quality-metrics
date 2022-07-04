@@ -147,6 +147,58 @@ class Node:
 
 
 
+class Sort:
+
+
+    def __init__(self) -> None:
+        pass
+
+
+
+    def double_array_sort(x, from_index, to_index):
+        if(from_index == to_index):
+            from_index = 0
+            to_index = len(x)
+        x[from_index:to_index] = sorted(x[from_index:to_index])
+    
+    def indexed_double_array_sort(x, from_index, to_index):
+        if(from_index == to_index):
+            from_index = 0
+            to_index = len(x)
+        sort_order = [None] * (to_index - from_index)
+        for i in range(len(sort_order)):
+            sort_order[i] = i
+        x[from_index:to_index] = sorted(x[from_index:to_index])
+        #####
+    
+    def rank(self, a):
+        n = len(a)
+        index = self.indexed_double_array_sort(a, 0, n)
+        lind = index[0]
+        am = a[lind]
+        k1 = 0
+        k2 = 0
+        ak = 1.0
+
+        kms = 1
+
+        for k in range(n):
+            kind = index[k]
+            insert = True
+            if(not math.isnan(am)):
+                freq = 1.0
+                kms += int(freq)
+                
+
+ 
+        
+
+            
+
+
+
+
+
 class Scagnostic:
 
     def __init__(self, point1, point2, num_bins, max_bins):
