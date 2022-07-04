@@ -10,5 +10,7 @@
     "delta_sa": 0.32,
     "num_bins": 50,
     "max_bins": 1000,
-    "resolution": 1000
+    "resolution": 1000,
+    "double_max": 1.7976931348623158E+308 
+
 }

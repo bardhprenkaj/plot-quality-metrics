@@ -84,6 +84,156 @@ class Binner:
 
         return k
 
+class Triangle:
+
+    def __init__(self, e1, e2, e3):
+        self.edge = None
+        self.centre_x = None
+        self.centre_y = None
+        self.radius = None
+        self.on_complex = True
+
+        self.update(e1, e2, e3)
+
+
+    def update(self, e1, e2, e3):
+        edge = e1
+        e1.set_next_edge(e2)
+        e2.set_next_edge(e3)
+        e3.set_next_edge(e1)
+
+        e1.set_triangle(self)
+        e2.set_triangle(self)
+        e3.set_triangle(self)
+
+        self.find_circle(self)
+
+    def find_circle(self):
+        pass
+
+    def in_circle(self, node):
+        return node.dist_to_node(self.centre_x, self.centre_y) < self.radius
+
+    def remove_edges(self, edges):
+        edges.remove(self.edge)
+        edges.remove(self.edge.next_edge)
+        edges.remove(self.edge.next_edge.next_edge)
+
+class Edge:
+
+    def __init__(self, node1, node2):
+        self.node1 = node1
+        self.node2 = node2
+
+        self.next_edge = None
+        self.inverse_edge = None
+        self.next_convect_hull_link = None
+
+        self.triangle = None
+
+        self.a, self.b, self.c = (0,0,0)
+
+        self.on_hull = False
+        self.on_mst = False
+        self.on_shape = False
+        self.on_outlier = False
+
+        self.update(node1, node2)
+
+    def set_next_edge(self, next_edge):
+        self.next_edge = next_edge
+
+    def set_triangle(self, triangle):
+        self.triangle = triangle
+
+    def update(self, node1, node2):
+        self.node1 = node1
+        self.node2 = node2
+
+        self.a = node2.y - node1.y
+        self.b = node1.x - node2.x
+        self.c = node2.x * node1.y - node1.x * node2.y
+
+        self.weight = math.sqrt(self.a * self.a + self.b * self.b)
+
+        self.as_index()
+
+    def as_index(self):
+        self.node1.edge = self
+
+    def make_symm(self):
+        edge = Edge(self.node2, self.node1)
+        self.link_symm(edge)
+        return edge
+
+    def link_symm(self, edge):
+        self.inverse_edge = edge
+        if edge:
+            edge.inverse_edge = self 
+
+    def on_side(self, node):
+        s = self.a * node.x + self.b * node.y + c
+        if s > 0:
+            return 1
+        if s < 0:
+            return -1
+        return 0
+
+    def most_left(self):
+        e = self
+        ee = self
+        ee = e.next_edge.next_edge.inverse_edge
+        while ee and not self.is_equal(ee):
+            e = ee
+        return e.next_edge.next_edge
+
+    def most_right(self):
+        e = self
+        ee = self
+        ee = e.inverse_edge.next_edge
+        while e.inverse_edge and ee:
+            e = ee
+        return e
+
+    def delete_simplex(self):
+        on_shape = False
+        self.triangle.on_complex = False
+        if self.inverse_edge:
+            self.inverse_edge.on_shape = False
+            self.inverse_edge.triangle.on_complex = False
+
+
+    def is_equal(self, other):
+        return other.node1.x == self.node1.x and other.node2.x == self.node2.x and other.node1.y == self.node1.y and other.node2.y == self.node2.y
+
+    def is_equivalent(self, other):
+        return self.is_equal(other) and (other.node1.x == self.node2.x and other.node1.y == self.node2.y and other.node2.x == self.node1.x and other.node2.y == self.node1.y)
+
+    def other_node(self, n):
+        return self.node2 if n.equals(self.node1) else self.node1
+
+    def is_new_edge(self, n):
+        for edge in n.neighbors:
+            if self.is_equivalent(edge):
+                return False
+        return True
+
+    def get_runts(self, max_length):
+        max_length1 = 0
+        max_length2 = 0
+
+        count1 = self.node1.get_MST_Children(self.weight, max_length1)
+        count2 = self_node2.getMSTChildren(self.weight, max_length2)
+
+        if count1 < count2:
+            max_length[0] = max_length1
+            return count1
+        elif count1 == count2:
+            max_length2[0] = max_length1 if max_length1 < max_length2 else max_length2
+            return count1
+        else:
+            max_length[0] = max_length2
+            return count2
 
 class Node:
 
@@ -96,6 +246,8 @@ class Node:
         self.neighbors = list()
         self.onHull = False
         self.isVisited = False
+
+        self.env_config = Configuration('res/config.json')
 
     def dist_to_node(self, px, py):
         dx = px - self.x
@@ -110,50 +262,18 @@ class Node:
     
     def shortest_edge(self, mst):
         emin = None
-        if(self.neighbors != None):
-            DOUBLE_MAX = 1.7976931348623158E+308 
+        wmin = self.env_config.get_property("double_max")
+        if self.neighbors:
             for edge in self.neighbors:
-                e =  Edge(edge)
-                if( mst or e == self.neighbors[-1]):
-                    wt = e.weight
-                    if( wt < DOUBLE_MAX):
+                if mst or edge.is_equal(self.neighbors[-1]):
+                    wt = edge.weight
+                    if wt < wmin:
                         wmin = wt
-                        emin = e
+                        emin = edge
         return emin
 
 
-    def get_MST_Children(self,cutoff, max_lenght):
-        count = 0
-        if(self.visited):
-            return count
-        self.isVisited = True
-
-        for edge in self.neighbors:
-            e =  Edge(edge)
-            if(e.onMST and e.weight < cutoff and not e.otherNode(this).isVisited):
-                if():
-
-
-
-   
-        Iterator it = neighbors.iterator();
-        while (it.hasNext()) {
-            Edge e = (Edge) it.next();
-            if (e.onMST) {
-                if (e.weight < cutoff) {
-                    if (!e.otherNode(this).isVisited) {
-                        count += e.otherNode(this).getMSTChildren(cutoff, maxLength);
-                        double el = e.weight;
-                        if (el > maxLength[0])
-                            maxLength[0] = el;
-                    }
-                }
-            }
-        }
-        count += this.count; // add count for this node
-        return count;
-    }
-
+    def 
 
 
 
