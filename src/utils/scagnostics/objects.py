@@ -2,6 +2,7 @@ from curses.ascii import NUL
 from pyparsing import null_debug_action
 from environment.envconfig import Configuration
 import math
+import numpy as np
 
 class BinnedData:
 
@@ -223,13 +224,13 @@ class Edge:
         max_length2 = 0
 
         count1 = self.node1.get_MST_Children(self.weight, max_length1)
-        count2 = self_node2.getMSTChildren(self.weight, max_length2)
+        count2 = self.node2.get_MST_Children(self.weight, max_length2)
 
         if count1 < count2:
             max_length[0] = max_length1
             return count1
         elif count1 == count2:
-            max_length2[0] = max_length1 if max_length1 < max_length2 else max_length2
+            max_length2 = max_length1 if max_length1 < max_length2 else max_length2
             return count1
         else:
             max_length[0] = max_length2
@@ -290,13 +291,172 @@ class Node:
         return count
 
 
+class Cluster:
+
+    def __init__(self, num_clusters, num_iterations):
+        self.members = np.array(list())
+        self.n_var = None
+        self.n_row = None
+        self.num_clusters = 0
+        self.num_iterations = 3
+
+        if num_iterations != 0:
+            self.num_iterations = num_iterations
+
+        if num_clusters != 0:
+            self.num_clusters = num_clusters
 
 
+    def compute(self, data):
+        def init_array(x, y):
+            return np.array([np.array([0] * x)] * y)
+
+        self.n_row, self.n_var = data.shape
+
+        use_stopping_rule = False
+        
+        ssr = list()
+        if self.num_clusters == 0:
+            use_stopping_rule = True
+            self.num_clusters = 25
+            ssr = init_array(self.n_var, self.num_clusters)
 
 
+        center = init_array(self.n_var, self.num_clusters)
+        count = init_array(self.n_var, self.num_clusters)
+        mean = init_array(self.n_var, self.num_clusters)
+        min_ = init_array(self.n_var, self.num_clusters)
+        max_ = init_array(self.n_var, self.num_clusters)
+        ssq = init_array(self.n_var, self.num_clusters)
+        closest_points = [0] * self.num_clusters
+        closest_distances = [0] * self.num_clusters
+
+        self.members = np.array([0] * self.n_row)
+        mem = np.array([0] * self.n_row)
 
 
+        for k in range(self.num_clusters):
 
+            for iter in range(self.num_iterations):
+
+                reassigned = False
+
+                for l in range(k):
+                    for j in range(self.n_var):
+                        if iter == 0 or center[l][j] != mean[l][j]:
+                            self.reassign(k, data, center, count, mean, min_, max_, ssq, closest_points, closest_distances)
+                            reassigned = True
+                            break
+                if reassigned:
+                    break
+            
+            if not reassigned or k == 0:
+                break
+
+
+            if use_stopping_rule:
+                ssq1, ssq2 = (0,0)
+                for j in range(self.n_var):
+                    for l in range(k):
+                        ssq1 += ssr[l][j]
+                        ssq2 += ssq[l][j]
+                        ssr[l][j] = ssq[l][j]
+
+                pre = (ssq1 - ssq2) / ssq1
+                if pre > 0 and pre < .1:
+                    self.num_clusters = k
+                    self.reassign(k, data, center, count, mean, min_, max_, ssq, closest_points, closest_distances)
+                    mem[0:self.n_row] = self.members[0:self.n_row]
+                    break
+                else:
+                    self.members[0:self.n_row] = mem[0:self.n_row]
+
+
+            if k < (self.num_clusters - 1):
+                kn, dmax, jm, km, cutpoint = (k + 1, 0, 0, 0, 0)
+                for l in range(k):
+                    for j in range(self.n_var):
+                        dm = max_[l][j] - min_[l][j]
+                        if dm > dmax:
+                            cutpoint = mean[l][j]
+                            dmax = dm
+                            jm = j
+                            km = l
+                for i in range(self.n_row):
+                    if self.members[i] == km and data[i][jm] > cutpoint:
+                        for j in range(self.n_var):
+                            count[km][j] -= 1
+                            count[kn][j] += 1
+                            mean[km][j] += (data[i][j] - mean[km][j]) / count[km][j]
+                            mean[kn][j] += (data[i][j] - mean[kn][j]) / count[kn][j]
+
+        nc, cutoff = 0, .1
+        for k in range(self.num_clusters):
+            if (count[k][0] / self.n_row) > cutoff:
+                nc += 1
+
+        exemplars = [0] * nc
+        nc = 0
+        for k in range(self.num_clusters):
+            if (count[k][0] / self.n_row) > cutoff:
+                exemplars[nc] = closest_points[k]
+                nc += 1
+
+        return exemplars
+
+
+    def reassign(self, num_clusters, data, center, count, mean, min_, max_, ssq, closest_points, closest_distances):
+
+        for k in range(num_clusters):
+            closest_points[k] = -1
+            closest_distances[k] = float('inf')
+            for j in range(self.n_var):
+                center[k][j] = mean[k][j]
+                mean[k][j] = 0
+                count[k][j] = 0
+                ssq[k][j] = 0
+                min_[k][j] = float('inf')
+                max_[k][j] = float('-inf')
+
+        for i in range(self.n_row):
+            dmin = float('inf')
+            kmin = -1
+            for k in range(num_clusters):
+                dd = self.distance(data[i], center[k])
+                if dd < dmin:
+                    dmin = dd
+                    kmin = k
+                    if dmin < closest_distances[k]:
+                        closest_distances[k] = dmin
+                        closest_points[k] = i
+
+            if kmin < 0:
+                self.members[i] = -1
+            else:
+                self.members[i] = kmin
+
+            
+            for j in range(self.n_var):
+                if data[i][j]:
+                    count[kmin][j] += 1
+                    xn = count[kmin][j]
+                    xa = data[i][j]
+                    mean[kmin][j] += (xa - mean[kmin][j]) / xn
+
+                    if xn > 1:
+                        ssq[kmin][j] += xn * (xa - mean[kmin][j]) * (xa - mean[kmin][j]) / (xn - 1)
+                    if min_[kmin][j] > xa:
+                        min_[kmin][j] = xa
+                    if max_[kmin][j] < xa:
+                        max_[kmin][j] = xa
+
+
+    def distance(self, a, b):
+        dist = 0
+        for i in range(len(a)):
+            dist += (a[i] - b[i]) * (a[i] - b[i])
+        return dist
+        
 class Scagnostic:
 
     def __init__(self, point1, point2, num_bins, max_bins):
