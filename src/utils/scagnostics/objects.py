@@ -273,6 +273,25 @@ class Node:
         return emin
 
 
+    def get_MST_Children(self, cutoff, max_length):
+        count = 0
+        if(self.isVisited):
+            return count
+        self.isVisited = True
+
+        for e in self.neighbors:
+            if(e.on_mst and e.weight < cutoff and not e.other_node(self).isVisited):
+                count += e.other_node(self).get_MST_Children(cutoff, max_lenght)
+                el = e.weight
+                if(el > max_length[0]):
+                    max_length[0] = el
+
+        count += self.count
+        return count
+
+
+
+
 
 
 
