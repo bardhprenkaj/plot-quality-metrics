@@ -107,7 +107,7 @@ class Triangle:
         e2.set_triangle(self)
         e3.set_triangle(self)
 
-        self.find_circle(self)
+        self.find_circle()
 
     def find_circle(self):
         pass
@@ -173,7 +173,7 @@ class Edge:
             edge.inverse_edge = self 
 
     def on_side(self, node):
-        s = self.a * node.x + self.b * node.y + c
+        s = self.a * node.x + self.b * node.y + self.c
         if s > 0:
             return 1
         if s < 0:
@@ -282,7 +282,7 @@ class Node:
 
         for e in self.neighbors:
             if(e.on_mst and e.weight < cutoff and not e.other_node(self).isVisited):
-                count += e.other_node(self).get_MST_Children(cutoff, max_lenght)
+                count += e.other_node(self).get_MST_Children(cutoff, max_length)
                 el = e.weight
                 if(el > max_length[0]):
                     max_length[0] = el
@@ -456,7 +456,7 @@ class Cluster:
         for i in range(len(a)):
             dist += (a[i] - b[i]) * (a[i] - b[i])
         return dist
-        
+
 class Scagnostic:
 
     def __init__(self, point1, point2, num_bins, max_bins):
