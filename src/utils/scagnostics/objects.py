@@ -273,8 +273,6 @@ class Node:
         return emin
 
 
-    def 
-
 
 
 
