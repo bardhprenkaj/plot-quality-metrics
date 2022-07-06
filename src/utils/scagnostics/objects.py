@@ -1303,7 +1303,7 @@ class Scagnostic:
     
 
     def search_edge(self, e, nd):
-        e = Edge(e)
+       
         f2 = e.next_edge.on_side(nd)
 
         if(f2 == -1):
@@ -1314,7 +1314,7 @@ class Scagnostic:
                 return -1
         if(f2 == 0):
             e0 = e.next_edge
-        ee = Edge(e.next_edge)
+        ee = e.next_edge
         f3 =  ee.next_edge.on_side(nd)
         if(f3 == -1):
             if(ee.next_edge.inverse_edge != None):
