@@ -1,3 +1,5 @@
+from asyncio import coroutines
+from asyncio.format_helpers import _format_callback_source
 from curses.ascii import NUL
 from stat import FILE_ATTRIBUTE_SPARSE_FILE
 from pyparsing import null_debug_action
@@ -889,7 +891,7 @@ class Scagnostic:
     
     def compute_alpha_graph(self):
         deleted = True
-        alpha = self.compute_alpha_value();
+        alpha = self.compute_alpha_value()
         while(deleted):
             deleted = False
             for i in self.edges:
@@ -906,6 +908,489 @@ class Scagnostic:
                             deleted = True
 
         self.mark_shape()
+    
+    def make_shape(self):
+        for i in self.edges:
+            e = Edge(i)
+            e.on_shape = False
+            if(e.triangle.on_complex):
+                if(e.inverse_edge == None):
+                    e.on_shape = True
+                elif(not e.inverse_edge.triangle.on_complex):
+                    e.on_shape = True
+    
+    def edge_is_exposed(self, alpha, e):
+        e = Edge(e)
+        x1 = e.node1.x
+        x2 = e.node2.x
+        y1 = e.node1.y
+        y2 = e.node2.y
+        xe = (x1 + x2) / 2
+        ye = (y1 + y2) / 2
+        d = math.sqrt(alpha**2 -e.weight**2 / 4)
+        xt = d * (y2 -y1) / e.weight
+        yt = d * (x2 -x1) / e.weight
+        xc1 = xe + xt
+        yc1 = ye - yt
+        xc2 = xe - xt
+        yc2 = ye + yt
+        points_in_circle1 = self.compute_points_in_circle(e.node1, xc1, yc1, alpha) or self.compute_points_in_circle(e.node2, xc1, yc1, alpha)
+        points_in_circle2 = self.compute_points_in_circle(e.node1, xc2, yc2, alpha) or self.compute_points_in_circle(e.node2, xc2, yc2, alpha)
+
+        return not (points_in_circle1 and points_in_circle2)
+    
+    def compute_stringy_measure(self):
+        count1 = 0
+        count2 = 0
+        for i in self.nodes:
+            n = Node(i)
+            if(n.mst_degree == 1):
+                count1 += 1
+            if(n.mst_degree == 2):
+                count2 += 2
+        
+        result = count2/(len(self.nodes) - count1)
+        return result**3
+    
+    def compute_cluster_measure(self):
+        it = self.mst_edges
+        max_length = [0] * 1
+        max_value = 0
+
+        for i in it:
+            e = Edge(i)
+            self.clear_visit()
+            e.on_mst = False
+            runts = e.get_runts(max_length)
+            e.on_mst = True
+            if(max_length[0] > 0):
+                value = runts * (1 - max_length[0] / e.weight)
+                if(value > max_value):
+                    max_value = value
+        return 2 *  max_value / self.totalPeeledCount
+    
+    def clear_visit(self):
+        it = self.nodes
+        for i in it:
+            n = Node(i)
+            n.isVisited = False
+    
+
+    def compute_monotonicity_measure(self):
+        n = len(self.counts)
+        ax = [0.0] * n
+        ay = [0.0] * n
+        weights = [0.0] * n
+
+        for i in range(n):
+            ax[i] = self.px[i]
+            ay[i] = self.py[i]
+            weights[i] = self.counts[i]
+        
+        rx = Sorts.rank(ax)
+        ry = Sorts.rank(ay)
+        s = self.compute_pearson(rx, ry, weights)
+        return s**2
+    
+    def compute_pearson(self, x, y, weights):
+        n = len(x)
+        xmean = 0
+        ymean = 0
+        xx = 0
+        yy = 0
+        xy = 0
+        sumwt = 0
+        for i in range(n):
+            wt = weights[i]
+            if(wt > 0 and not self.is_outlier[i]):
+                sumwt += wt
+                xx += (x[i] - xmean) * wt * (x[i] - xmean)
+                yy += (y[i] - ymean) * wt * (y[i] - ymean)
+                xy += (x[i] - xmean) * wt * (y[i] - ymean)
+                xmean += (x[i] - xmean) * wt / sumwt
+                ymean += (y[i] - ymean) * wt / sumwt
+        
+        xy = xy / xy /math.sqrt(xx * yy)
+        return xy
+    
+    def compute_sparseness_measure(self):
+        n = len(self.sorted_original_mst_lengths)
+        n90 = (9 * n) / 10
+        sparse = math.min(self.sorted_original_mst_lengths[n90] / 1000, 1)
+        t = self.total_count / 500
+        correction = .7 + .3 / (1 + t**2)
+        return correction * sparse
+    
+
+    def compute_striation_measure(self):
+        num_edges = 0
+        it = self.mst_edges
+        for i in it:
+            e = Edge(i)
+            n1 = Node(e.node1)
+            n2 = Node(e.node2)
+            if(n1.mst_degree == 2 and n2.mst_degree==2):
+                e1 = self.get_adjacent_mst_edge(n1, e)
+                e2 = self.get_adjacent_mst_edge(n2, e)
+
+                if(self.cosine_of_adjacent_edges(e, e1, n1) <  -.7 and self.cosine_of_adjacent_edges(e, e2, n2) < -.7):
+                    num_edges += 1
+        return num_edges / len(self.mst_edges)
+    
+    def get_adjacent_mst_edge(self, n, e):
+        nt = Node(n).neighbors
+        for i in nt:
+            et = Edge(i)
+            if(et.on_mst and not (e == et)):
+                return et
+        return None
+    
+    def consine_of_adjacent_edges(self, e1, e2, n):
+        v1x = Node(Edge(e1).other_node(n)).x - Node(n).x
+        v1y = Node(Edge(e1).other_node(n)).y - Node(n).y
+        v2x = Node(Edge(e2).other_node(n)).x - Node(n).x
+        v2y = Node(Edge(e2).other_node(n)).y - Node(n).y
+
+        v1 = math.sqrt(v1x**2 + v1y**2)
+        v2 = math.sqrt(v2x**2 + v2y**2)
+
+        v1x = v1x / v1
+        v1y = v1y / v1
+        v2x = v2x / v2
+        v2y = v2y / v2
+
+        return v1x * v2x + v1y * v2y
+    
+    def compute_convexity_measure(self):
+        if(self.hull_area == 0):
+            return 1
+        else:
+            t = self.total_count / 500
+            correction = 0.7 + 0.3 / (1 + t**2)
+            convexity = self.alpha_area / self.hull_area
+            return correction * convexity
+    
+    def compute_skinny_measure(self):
+        if(self.alpha_perimeter > 0):
+            return 1 - math.sqrt(4 * math.pi * self.alpha_area) / self.alpha_perimeter
+        else:
+            return 1
+    
+    def compute_alpha_area(self):
+        area = 0
+        tri = self.triangles
+        for i in tri:
+            t = Triangle(i)
+            if(t.on_complex):
+                p1 = Node(Edge(t.edge).node1)
+                p2 = Node(Edge(t.edge).node2)
+                p3 = Node(Edge(t.edge).next_edge.node2)
+
+                area += abs(p1.x * p2.y + p1.y * p3.x + p2.x * p3.y
+                        - p3.x * p2.y - p3.y * p1.x - p1.y * p2.x)
+        self.alpha_area = area / 2
+
+    def compute_hull_area(self):
+        area = 0
+        tri = self.triangles
+        for i in tri:
+            t = Triangle(i)
+         
+            p1 = Node(Edge(t.edge).node1)
+            p2 = Node(Edge(t.edge).node2)
+            p3 = Node(Edge(t.edge).next_edge.node2)
+
+            area += abs(p1.x * p2.y + p1.y * p3.x + p2.x * p3.y
+                    - p3.x * p2.y - p3.y * p1.x - p1.y * p2.x)
+
+        self.hull_area = area / 2
+
+    def compute_alpha_perimeter(self):
+        sum = 0 
+        it = self.edges
+        for i in it:
+            e = Edge(i)
+            if(e.on_shape):
+                sum += e.weight
+        
+        self.alpha_perimeter = sum
+    
+    def compute_hull_perimiter(self):
+        sum = 0
+        e = Edge(self.hull_start)
+        while(True):
+            sum += Node(e.node1).dist_to_node(Node(e.node2).x, Node(e.node2).y)
+            e = e.next_convect_hull_link
+            if(e == self.hull_start):
+                break
+        self.hull_perimeter = sum
+    
+    def set_neighbors(self):
+        it = self.edges
+
+        for i in it:
+            e = Edge(i)
+            if(e.is_new_edge(e.node1)):
+                Node(e.node1).set_neighbor(e)
+            if(e.is_new_edge(e.node2)):
+                Node(e.node2).set_neighbor(e)
+    
+    def insert(self, px, py, count, id):
+        eid = 0
+        nd = Node(px, py, count, id)
+        self.nodes.append(nd)
+
+        if(len(self.nodes) < 3):
+            return
+        if(len(self.nodes) == 3):
+            p1 = Node(self.nodes[0])
+            p2 = Node(self.nodes[1])
+            p3 = Node(self.nodes[2])
+
+            e1 = Edge(p1, p2)
+
+            if(e1.on_side(p3) == 0):
+                self.nodes.remove(nd)
+                return
+            if(e1.on_side(p3) == -1):
+                p1 = Node(self.nodes[0])
+                p2 = Node(self.nodes[1])
+                e1.update(p1, p2)
+            
+            e2 = Edge(p2, p3)
+            e3 = Edge(p3, p1)
+
+            e1.next_edge = e2
+            e2.next_edge = e3
+            e3.next_edge = e1
+        
+            self.hull_start = e1
+            self.triangles.append(Triangle(self.edges, e1, e2, e3))
+            return
+
+        actE = Edge(self.edges[0])
+
+        if(actE.on_side(nd) == -1):
+            if(actE.inverse_edge == None):
+                eid = -1
+            else:
+                eid = self.search_edge(actE.inverse_edge, nd)
+        else:
+            eid = self.search_edge(actE, nd)
+        if(eid == 0):
+            self.nodes.remove(nd)
+            return
+        if(eid > 0):
+            self.expand_triangle(actE, nd, eid)
+        else:
+            self.expand_hull(nd)
+        
+
+    def expande_triangle(self, e, nd, type):
+        e = Edge(e)
+        e1 = e
+        e2 = e1.next_edge
+        e3 = e2.next_edge
+
+        p1 = e1.node1
+        p2 = e2.node1
+        p3 = e3.node1
+
+        if (type == 2):
+            e10 = Edge(p1, nd)
+            e20 = Edge(p2, nd)
+            e30 = Edge(p3, nd)
+
+            Triangle(e.triangle).remove_edges(self.edges)
+            self.triangles.remove(e.inverse_edge)
+            e100 = e10.make_symm()
+            e200 = e20.make_symm()
+            e300 = e30.make_symm()
+
+            self.triangles.append(Triangle(self.edges, e1, e20, e100))
+            self.triangles.append(Triangle(self.edges, e2, e30, e200))
+            self.triangles.append(Triangle(self.edges, e3, e10, e300))
+            self.swap_test(e1)
+            self.swap_test(e2)
+            self.swap_test(e3)
+        else:
+            e4 = Edge(e1.inverse_edge)
+            if(e4 == None or e4.triangle==None):
+                e30 = Edge(p3, nd)
+                e02 = Edge(nd, p2)
+                e10 = Edge(p1, nd)
+                e03 = e30.make_symm()
+
+                e10.as_index()
+                e1.most_left.next_convect_hull_link = e10
+                e10.next_convect_hull_link = e02
+                e02.next_convect_hull_link = e1.next_convect_hull_link
+                self.hull_start = e02
+
+                self.triangles.remove(e1.triangle)
+                self.edges.remove(e1)
+                self.edges.append(e10)
+                self.edges.append(e02)
+                self.edges.append(e30)
+                self.edges.append(e03)
+                self.triangles(Triangle(e2, e30, e02))
+                self.triangles(Triangle(e3, e10, e03))
+                self.swap_test(e2)
+                self.swap_test(e3)
+                self.swap_test(e30)
+            else:
+                e5 = Edge(e4.next_edge)
+                e6 = Edge(e5.next_edge)
+                p4 = Node(e6.node1)
+                e10 = Edge(p1, nd)
+                e20 = Edge(p2, nd)
+                e30 = Edge(p3, nd)
+                e40 = Edge(p4, nd)
+                self.triangles.remove(e4.triangle)
+                e.triangle.removeEdges(self.edges)
+                self.triangles.remove(e4.triangle)
+                e4.triangle.removeEdges(self.edges)
+                e5.as_index()
+                e2.as_index()
+                self.triangles.append(Triangle(self.edges, e2, e30, e20.make_symm()))
+                self.triangles.append(Triangle(self.edges, e3, e10, e30.make_symm()))
+                self.triangles.append(Triangle(self.edges, e5, e40, e10.make_symm()))
+                self.triangles.append(Triangle(self.edges, e6, e20, e40.make_symm()))
+                self.swap_test(e2)
+                self.swap_test(e3)
+                self.swap_test(e5)
+                self.swap_test(e6)
+                self.swap_test(e10)
+                self.swap_test(e20)
+                self.swap_test(e30)
+                self.swap_test(e40)
+    
+
+    def expand_hull(self, nd):
+        e1 = Edge()
+        d2 = Edge()
+        e3 = None
+        enext = Edge()
+
+        e = Edge(self.hull_start)
+        comedge = None
+        lastbe = None
+        while(True):
+            enext = e.next_convect_hull_link
+            if(e.on_side(nd) == -1):
+                if(lastbe != None):
+                    e1.make_symm()
+                    e2 = Edge(e.node1, nd)
+                    e2 = Edge(nd, e.node2)
+                    if(comedge == None):
+                        self.hull_start = lastbe
+                        lastbe.next_convect_hull_link = e2
+                        lastbe = e2
+                    else:
+                        comedge.make_symm()
+                    
+                    comedge = e3
+                    self.triangles.append(Triangle(self.edges, e1, e2, e3))
+                    self.swap_test(e)
+            else:
+                if(comedge != None):
+                    break
+                lastbe = e
+            e = enext
+        
+        lastbe.next_convect_hull_link = e3
+        e3.next_convect_hull_link = e
+    
+
+    def search_edge(self, e, nd):
+        e = Edge(e)
+        f2 = e.next_edge.on_side(nd)
+
+        if(f2 == -1):
+            if(e.next_edge.inverse_edge != None):
+                return self.search_edge(e.next_edge.inverse_edge, nd)
+            else:
+                self.act_e  = e
+                return -1
+        if(f2 == 0):
+            e0 = e.next_edge
+        ee = Edge(e.next_edge)
+        f3 =  ee.next_edge.on_side(nd)
+        if(f3 == -1):
+            if(ee.next_edge.inverse_edge != None):
+                return self.search_edge(ee.next_edge.inverse_edge, nd)
+            else:
+                self.act_e = ee.next_edge
+                return -1
+        
+        if(f3 == 0):
+            e0 = ee.next_edge
+        if(e.on_side(nd) == 0):
+            e0 = e
+        if(e0 != None):
+            self.act_e = e0
+            if(e0.next_edge.on_side(nd) == 0):
+                self.act_e = e0.next_edge
+                return 0
+            if (e0.next_edge.next_edge.on_side(nd) == 0):
+                return 0
+            return 1
+        self.act_e = ee
+        return 2
+
+    def swap_test(self, e11):
+        e21 = e11.inverse_edge
+        if(e21 == None or e21.triangle == None):
+            return
+        e12 = e11.next_edge()
+        e13 = e12.next_edge()
+        e22 = e21.next_edge()
+        e23 = e23.next_edge()
+
+        if(e11.trinagle.in_circle(e22.node2) or e21.trinagle.in_circle(e12.node2)):
+            e11.update(e22.node2, e12.node2)
+            e21.update(e12.node2, e22.node2)
+            e11.link_symm()
+            e12.triangle.update(e13, e22, e11)
+            e12.triangle.update(e23, e12, e21)
+            e12.as_index()
+            e22.as_index()
+            self.swap_test(e12)
+            self.swap_test(e22)
+            self.swap_test(e13)
+            self.swap_test(e23)
+    
+    def mark_hull(self):
+        e = self.hull_start
+        if(e != None):
+            while(True):
+                e.on_hull = True
+                e.node1.on_hull = True
+                e.node2.on_hull = True
+                e = e.next_edge
+                if(e == self.hull_start):
+                    break
+
+
+
+
+
+        
+
+
+
+
+
+                
+
+    
+
+
+
+
+
+
+
 
                     
 
