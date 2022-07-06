@@ -1,6 +1,7 @@
 from curses.ascii import NUL
 from stat import FILE_ATTRIBUTE_SPARSE_FILE
 from pyparsing import null_debug_action
+import random
 from environment.envconfig import Configuration
 import math
 import numpy as np
@@ -459,7 +460,7 @@ class Cluster:
             dist += (a[i] - b[i]) * (a[i] - b[i])
         return dist
 
-class Sort:
+class Sorts:
 
 
     def __init__(self) -> None:
@@ -473,55 +474,57 @@ class Sort:
             to_index = len(x)
         x[from_index:to_index] = sorted(x[from_index:to_index])
     
+    @classmethod
     def indexed_double_array_sort(x, from_index, to_index):
+        def sort(x):
+            for i in range(len(x)):
+                for j in range(len(x)-i-1):
+                    if x[int(x[j])] >= x[int(x[j+1])]:
+                        x[j], x[j+1] = x[j+1], x[j]
+            return x
+            
         if(from_index == to_index):
             from_index = 0
             to_index = len(x)
         sort_order = [None] * (to_index - from_index)
         for i in range(len(sort_order)):
             sort_order[i] = i
-        x[from_index:to_index] = sorted(x[from_index:to_index])
-        ##### da sistemare
+        x[from_index:to_index] = sort(x[from_index:to_index])
+
+        return [int(i) for i in x]
     
     def rank(self, a):
-        n = len(a)
-        ranks = [None] * n
-        index = self.indexed_double_array_sort(a, 0, n)
+        ranks = [0] * len(a)
+        index = self.indexed_double_array_sort(a, 0, len(a))
         lind = index[0]
         am = a[lind]
-        k1 = 0
-        k2 = 0
-        ak = 1.0
+        k1, k2, ak, kms = (0, 0, 1.0, 1)
 
-        kms = 1
 
-        for k in range(n):
+        for k in range(len(a)):
             kind = index[k]
             insert = True
-            if(not math.isnan(am)):
+            if not math.isnan(am):
                 freq = 1.0
                 kms += int(freq)
-                if(freq> 1.0):
+                if freq > 1.0:
                     ak += 0.5 * (freq - 1.0)
-                    k1 = k
-                    k2 = k
-                elif (a[kind] == am):
+                    k1, k2 = (k, k)
+                elif a[kind] == am:
                     k2 = k
                     ak += 0.5
-                    if(k< n-1):
+                    if k < (len(a) - 1):
                         insert = False
                 
                 if(insert):
                     for l in range(k1, k2):
                         lind = index[l]
                         ranks[lind] = ak
-                    if(k2 != n -1 and k == n-1):
+                    if(k2 != len(a) -1 and k == len(a)-1):
                         ranks[kind] = kms
             if(insert):
-                k1 = k
-                k2 = k
-                ak = kms
-                am = a[kind]
+                k1, k2, ak, am = (k, k, kms, a[kind])
+               
         return ranks
 
                 
@@ -529,6 +532,8 @@ class Sort:
 class Scagnostic:
 
     def __init__(self, point1, point2, num_bins, max_bins):
+        self.env_config = Configuration('res/config.json')
+    
         self.point1 = point1
         self.point2 = point2
         self.num_bins = num_bins
@@ -540,8 +545,305 @@ class Scagnostic:
 
         self.triangles = list()
         self.mst_edges = list()
+        self.hull_start = None
+        self.act_e = None
+        
+        self.total_peeled_count = 0
+        self.total_count = 0
+        
+        self.alpha_area, self.alpha_perimeter, self.hull_area, self.hull_perimeter = (1,1,1,1)
+        
+        self.total_original_mst_lengths = 0
+        
+        self.total_mst_outlier_lengths = 0
+        
+        self.sorted_original_mst_lengths = list()
+        
+        self.num_stagnostics = 9
 
+        self.scagnostic_labels = self.env_config.get_property('scagnostic_labels')
+        self.outlying = self.env_config.get_property('outlying')
+        self.skewed = self.env_config.get_property('skewed')
+        self.clumpy = self.env_config.get_property('clumpy')
+        self.sparse = self.env_config.get_property('sparse')
+        self.striated = self.env_config.get_property('striated')
+        self.convex = self.env_config.get_property('convex')
+        self.skinny = self.env_config.get_property('skinny')
+        self.stringy = self.env_config.get_property('stringy')
+        self.monotonic = self.env_config.get_property('monotonic')
+
+        self.fuzz = self.env_config.get_property('fuzz')
+        
+        self.is_outlier = list()
+        self.px = list()
+        self.py = list()
+        self.counts = list()
+        
         self.b = Binner(self.max_bins)
         self.bdata = self.b.bin_hex(self.point1, self.point2, self.num_bins)
 
 
+    def compute(self):
+        self.px = self.bdata.point1
+        self.py = self.bdata.point2
+        
+        if len(self.px) < 3:
+            return None
+        
+        xx = self.px[0]
+        yy = self.py[0]
+        
+        is_x_constant, is_y_constant = True, True
+        
+        for i in range(1, len(self.px)):
+            if self.px[i] != xx:
+                is_x_constant = False
+            if self.py[i] != yy:
+                is_y_constant = False
+                
+        if is_x_constant or is_y_constant:
+            return None
+        
+        
+        self.find_outliers()
+        
+        self.computer_alpha_graph()
+        self.compute_total_count()
+        self.compute_alpha_area()
+        self.compute_alpha_perimeter()
+        self.compute_hull_area()
+        self.compute_hull_perimeter()
+        
+        return self.compute_measures()
+    
+    
+    def get_num_scagnostics(self):
+        return len(self.scagnostic_labels)
+    
+    def get_scagnostics_labels(self):
+        return self.scagnostic_labels
+    
+    
+    def compute_scagnostics_exemplars(self, pts):
+        if len(pts) < 2:
+            return None
+        
+        c = Cluster(0, 0)
+        exmp = c.compute(pts)
+        exemplars = [False] * len(pts)
+        
+        for i in range(len(exmp)):
+            exemplars[exmp[i]] = True
+            
+        return exemplars
+
+    def compute_scagnostics_outliers(self, pts):
+        npts = len(pts)
+        nvar = len(pts[0])
+        
+        if npts < 2:
+            return None
+        
+        edges = [[None] * (npts - 1)] * 2
+        lst = [None] * npts
+        degrees = [0] * npts
+        cost = [0] * npts
+        lengths = [0] * (npts - 1)
+        
+        lst[0] = 0
+        cost[0] = float('inf')
+        cheapest = 0
+        
+        for i in range(1, npts):
+            for j in range(nvar):
+                d = pts[i][j] - pts[0][j]
+                cost[i] += d * d
+            if cost[i] < cost[cheapest]:
+                cheapest = i
+                
+                
+        for j in range(1, npts):
+            end = lst[cheapest]
+            jp = j - 1
+            edges[jp][0] = cheapest
+            edges[jp][1] = end
+            lengths[jp] = cost[cheapest]
+            degrees[cheapest] += 1
+            degrees[end] += 1
+            cost[cheapest] = float('inf')
+            end = cheapest
+            
+            for i in range(1, npts):
+                if cost[i] != float('inf'):
+                    dist = 0
+                    for k in range(nvar):
+                        d = pts[i][k] - pts[end][k]
+                        dist += d*d
+                    if dist < cost[i]:
+                        lst[i] = end
+                        cost[i] = dist
+                        
+                    if cost[i] < cost[cheapest]:
+                        cheapest = i
+                        
+        cutoff = self.find_cutoff(lengths)
+        outliers = [True for i in range(npts)]
+        
+        for i in range(npts-1):
+            if lengths[i] < cutoff:
+                for k in range(2):
+                    node = edges[i][k]
+                    outliers[node] = False
+                    
+                    
+        return outliers
+    
+    
+    def clear(self):
+        self.nodes.clear()
+        self.edges.clear()
+        self.triangles.clear()
+        self.mst_edges.clear()
+        
+        
+    def find_outliers(self):
+        self.counts = self.bdata.counts
+        self.is_outlier = [False] * len(self.px)
+        self.compute_dt()
+        self.compute_mst()
+        
+        self.sorted_original_mst_lengths = self.get_sorted_mst_edge_lens()
+        cutoff = self.compute_cutoff(self.sorted_original_mst_lengths)
+        self.computer_total_original_mst_lens()
+        
+        found_new_outliers = self.compute_mst_outliers(cutoff)
+        sorted_peeled_mst_lengths = None
+        while found_new_outliers:
+            self.clear()
+            self.compute_dt()
+            self.compute_mst()
+            self.sorted_original_mst_lengths = self.get_sorted_mst_edge_lens()
+            cutoff = self.compute_cutoff(sorted_peeled_mst_lengths)
+            found_new_outliers = self.compute_mst_outliers(cutoff)
+            
+            
+    def compute_total_count(self):
+        return sum(self.counts)
+    
+    def compute_measures(self):
+        result = [0] * self.num_stagnostics
+        
+        result[self.outlying] = self.compute_outlier_measure()
+        result[self.clumpy] = self.compute_cluster_measure()
+        result[self.skewed] = self.compute_mst_edge_len_skewness_measure()
+        result[self.convex] = self.compute_convexity_measure()
+        result[self.skinny] = self.compute_skinny_measure()
+        result[self.stringy] = self.compute_stringy_measure()
+        result[self.striated] = self.compute_striation_measure()
+        result[self.sparse] = self.compute_sparseness_measure()
+        result[self.monotonic] = self.compute_monotonicity_measure()
+
+        return result
+    
+    
+    def compute_dt(self):
+        self.total_peeled_count = 0
+        choices = list(range(0,13579))
+        for i in range(len(self.px)):
+            x = self.px[i] + int(8 * (random.choice(choices) - .5))
+            y = self.py[i] + int(8 * (random.choice(choices) - .5))
+            if not self.is_outlier[i]:
+                self.insert(x, y, self.counts[i], i)
+                self.total_peeled_count += self.counts[i]
+                
+        self.set_neighbours()
+        self.mark_hull()
+        
+        
+    def compute_mst(self):
+        if len(self.nodes) > 1:
+            mst_nodes = list()
+            mst_node = self.nodes[0]
+            self.update_mst_nodes(mst_node, mst_nodes)
+            
+            for i in range(len(self.nodes)):
+                add_edge = None
+                wmin = float('inf')
+                nmin = None
+                
+                for mst_node in mst_nodes:
+                    candidate_edge = mst_node.shortest_edge(False)
+                    if candidate_edge:
+                        wt = candidate_edge.weight
+                        
+                        if wt < wmin:
+                            wmin, nmin, add_edge = wt, mst_node, candidate_edge
+                            
+                if add_edge:
+                    add_node = add_edge.other_node(nmin)
+                    self.update_mst_nodes(add_node, mst_nodes)
+                    self.update_mste_edges(add_edge, self.mst_edges)
+                    
+    def find_cutoff(self, distances):
+        index = Sorts.indexed_double_array_sort(distances, 0, 0)
+        n50 = len(distances) / 2
+        n25 = n50 / 2
+        n75 = n50 + n25
+        
+        return distances[index[n75]] + 1.5 * (distances[index[n75]] - distances[index[n25]])
+    
+    
+    def compute_mst_outliers(self, omega):
+        found = False
+        
+        for node in self.nodes:
+            delete = True
+            for edge in node.neighbors:
+                if edge.on_mst and edge.weight < omega:
+                    delete = False
+                    
+            if delete:
+                sum_length = 0
+                for edge in node.neighbors:
+                    if edge.on_mst and not edge.on_outlier:
+                        sum_length += edge.weight
+                        edge.on_outlier = True
+                        
+                self.total_mst_outlier_lengths += sum_length
+                self.is_outlier[node.point1D] = True
+                found = True
+                
+        return found
+    
+    def compute_cutoff(self, lengths):
+        if len(lengths) == 0:
+            return 0
+        
+        n50 = len(lengths) / 2
+        n25 = n50 / 2
+        n75 = n50 + n25
+        
+        return lengths[n75] + 1.5 * (lengths[n75] - lengths[n25])
+    
+    def compute_alpha_value(self):
+        length = len(self.sorted_original_mst_lengths)
+        if length == 0:
+            return 100
+        n90 = (9 * length) / 10
+        alpha = self.sorted_original_mst_lengths[n90]
+        return min(alpha, 100)
+    
+    def compute_mst_edge_len_skewness_measure(self):
+        n = len(self.sorted_original_mst_lengths)
+        if n == 0:
+            return 0
+        
+        n50 = n / 2
+        n10 = n / 10
+        n90 = (9 * n) / 10
+        
+        skewness = (self.sorted_original_mst_lengths[n90] - self.sorted_original_mst_lengths[n50]) / (self.sorted_original_mst_lengths[n90] - self.sorted_original_mst_lengths[n10])
+        t = self.total_count / 500
+        correction = .7 + .3 / (1 + t * t)
+        
+        return 1 - correction * (1 - skewness)

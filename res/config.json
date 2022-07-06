@@ -11,6 +11,27 @@
     "num_bins": 50,
     "max_bins": 1000,
     "resolution": 1000,
-    "double_max": 1.7976931348623158E+308 
+    "double_max": 1.7976931348623158E+308,
+    "outlying": 0,
+    "skewed": 1,
+    "clumpy": 2,
+    "sparse": 3,
+    "striated": 4,
+    "convex": 5,
+    "skinny": 6,
+    "stringy": 7,
+    "monotonic": 8,
+    "scagnostic_labels": [
+        "Outlying",
+        "Skewed",
+        "Clumpy",
+        "Sparse",
+        "Striated",
+        "Convex",
+        "Skinny",
+        "Stringy",
+        "Monotonic"
+    ],
+    "fuzz": 0.999
 
 }
