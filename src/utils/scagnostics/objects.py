@@ -245,6 +245,7 @@ class Node:
         self.y = y
         self.count = count
         self.point1D  = point1D
+        self.mst_degree = 0
         self.anEdge = None
         self.neighbors = list()
         self.onHull = False
@@ -847,3 +848,70 @@ class Scagnostic:
         correction = .7 + .3 / (1 + t * t)
         
         return 1 - correction * (1 - skewness)
+
+
+    def update_mste_edges(self, add_edge, mst_edges):
+        add_edge = Edge(add_edge)
+        mst_edges.append(add_edge)
+        add_edge.on_mst = True
+        add_edge.node1.mst_degree +=1
+        add_edge.node1.mst_degree +=1
+    
+    def update_mst_nodes(self, add_node, mst_nodes):
+        mst_nodes.append(add_node)
+        add_node.on_mst = False
+
+    def get_shortest_mst_edge_lenghts(self):
+        length = self.compute_edge_lengths(self.mst_edges, len(self.mst_edges))
+        Sorts.double_array_sort(length, 0, 0)
+        return length
+    
+    def compute_outliner_measure(self):
+        return self.total_mst_outlier_lengths / self.total_original_mst_lengths
+    
+    def compute_edge_lengths(graph, n):
+        length = [0] * n
+        for index, e in graph:
+            e = Edge(e)
+            length[index] = e.weight
+    
+    def compute_points_in_circle(self, n, xc, yc, radius):
+        r = self.env_config.get_property('FUZZ')
+        i = Node(n).neighbors
+        for e in i:
+            e = Edge(e)
+            no = e.other_node(n)
+            no = Node(no)
+            dist = no.dist_to_node(xc, yc)
+            if(dist < r):
+                return True
+        return False
+    
+    def compute_alpha_graph(self):
+        deleted = True
+        alpha = self.compute_alpha_value();
+        while(deleted):
+            deleted = False
+            for i in self.edges:
+                e = Edge(i)
+                if(e.triangle.on_complex):
+                    if(alpha < e.weight / 2):
+                        e.triangle.on_complex = False
+                        deleted = True
+                    else:
+                        if(e.inverse_edge != None and e.inverse_edge.triangle.on_complex):
+                            continue
+                        if(not self.edge_is_exposed(alpha, e)):
+                            e.triangle.on_complex = False
+                            deleted = True
+
+        self.mark_shape()
+
+                    
+
+
+
+        
+
+
+
