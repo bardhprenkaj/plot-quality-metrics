@@ -853,7 +853,7 @@ class Scagnostic:
 
 
     def update_mste_edges(self, add_edge, mst_edges):
-        add_edge = Edge(add_edge)
+       
         mst_edges.append(add_edge)
         add_edge.on_mst = True
         add_edge.node1.mst_degree +=1
@@ -874,16 +874,13 @@ class Scagnostic:
     def compute_edge_lengths(graph, n):
         length = [0] * n
         for index, e in graph:
-            e = Edge(e)
             length[index] = e.weight
     
     def compute_points_in_circle(self, n, xc, yc, radius):
         r = self.env_config.get_property('FUZZ')
-        i = Node(n).neighbors
+        i = n.neighbors
         for e in i:
-            e = Edge(e)
             no = e.other_node(n)
-            no = Node(no)
             dist = no.dist_to_node(xc, yc)
             if(dist < r):
                 return True
@@ -895,7 +892,7 @@ class Scagnostic:
         while(deleted):
             deleted = False
             for i in self.edges:
-                e = Edge(i)
+                e = i
                 if(e.triangle.on_complex):
                     if(alpha < e.weight / 2):
                         e.triangle.on_complex = False
@@ -911,7 +908,7 @@ class Scagnostic:
     
     def make_shape(self):
         for i in self.edges:
-            e = Edge(i)
+            e = i
             e.on_shape = False
             if(e.triangle.on_complex):
                 if(e.inverse_edge == None):
@@ -920,7 +917,6 @@ class Scagnostic:
                     e.on_shape = True
     
     def edge_is_exposed(self, alpha, e):
-        e = Edge(e)
         x1 = e.node1.x
         x2 = e.node2.x
         y1 = e.node1.y
@@ -943,7 +939,6 @@ class Scagnostic:
         count1 = 0
         count2 = 0
         for i in self.nodes:
-            n = Node(i)
             if(n.mst_degree == 1):
                 count1 += 1
             if(n.mst_degree == 2):
@@ -957,8 +952,8 @@ class Scagnostic:
         max_length = [0] * 1
         max_value = 0
 
-        for i in it:
-            e = Edge(i)
+        for e in it:
+            
             self.clear_visit()
             e.on_mst = False
             runts = e.get_runts(max_length)
@@ -971,8 +966,7 @@ class Scagnostic:
     
     def clear_visit(self):
         it = self.nodes
-        for i in it:
-            n = Node(i)
+        for n in it:
             n.isVisited = False
     
 
@@ -1026,9 +1020,9 @@ class Scagnostic:
         num_edges = 0
         it = self.mst_edges
         for i in it:
-            e = Edge(i)
-            n1 = Node(e.node1)
-            n2 = Node(e.node2)
+            e = i
+            n1 = e.node1
+            n2 = e.node2
             if(n1.mst_degree == 2 and n2.mst_degree==2):
                 e1 = self.get_adjacent_mst_edge(n1, e)
                 e2 = self.get_adjacent_mst_edge(n2, e)
@@ -1038,18 +1032,17 @@ class Scagnostic:
         return num_edges / len(self.mst_edges)
     
     def get_adjacent_mst_edge(self, n, e):
-        nt = Node(n).neighbors
-        for i in nt:
-            et = Edge(i)
+        nt = n.neighbors
+        for et in nt:
             if(et.on_mst and not (e == et)):
                 return et
         return None
     
     def consine_of_adjacent_edges(self, e1, e2, n):
-        v1x = Node(Edge(e1).other_node(n)).x - Node(n).x
-        v1y = Node(Edge(e1).other_node(n)).y - Node(n).y
-        v2x = Node(Edge(e2).other_node(n)).x - Node(n).x
-        v2y = Node(Edge(e2).other_node(n)).y - Node(n).y
+        v1x = e1.other_node(n).x - n.x
+        v1y = e1.other_node(n).y - n.y
+        v2x = e2.other_node(n).x - n.x
+        v2y = e2.other_node(n).y - n.y
 
         v1 = math.sqrt(v1x**2 + v1y**2)
         v2 = math.sqrt(v2x**2 + v2y**2)
@@ -1080,11 +1073,11 @@ class Scagnostic:
         area = 0
         tri = self.triangles
         for i in tri:
-            t = Triangle(i)
+            t = i
             if(t.on_complex):
-                p1 = Node(Edge(t.edge).node1)
-                p2 = Node(Edge(t.edge).node2)
-                p3 = Node(Edge(t.edge).next_edge.node2)
+                p1 = t.edge.node1
+                p2 = t.edge.node2
+                p3 = t.edge.next_edge.node2
 
                 area += abs(p1.x * p2.y + p1.y * p3.x + p2.x * p3.y
                         - p3.x * p2.y - p3.y * p1.x - p1.y * p2.x)
@@ -1094,11 +1087,11 @@ class Scagnostic:
         area = 0
         tri = self.triangles
         for i in tri:
-            t = Triangle(i)
+            t = i
          
-            p1 = Node(Edge(t.edge).node1)
-            p2 = Node(Edge(t.edge).node2)
-            p3 = Node(Edge(t.edge).next_edge.node2)
+            p1 = t.edge.node1
+            p2 = t.edge.node2
+            p3 = t.edge.next_edge.node2
 
             area += abs(p1.x * p2.y + p1.y * p3.x + p2.x * p3.y
                     - p3.x * p2.y - p3.y * p1.x - p1.y * p2.x)
@@ -1109,7 +1102,7 @@ class Scagnostic:
         sum = 0 
         it = self.edges
         for i in it:
-            e = Edge(i)
+            e = i
             if(e.on_shape):
                 sum += e.weight
         
@@ -1117,9 +1110,9 @@ class Scagnostic:
     
     def compute_hull_perimiter(self):
         sum = 0
-        e = Edge(self.hull_start)
+        e = self.hull_start
         while(True):
-            sum += Node(e.node1).dist_to_node(Node(e.node2).x, Node(e.node2).y)
+            sum += e.node1.dist_to_node(e.node2.x, e.node2.y)
             e = e.next_convect_hull_link
             if(e == self.hull_start):
                 break
@@ -1129,11 +1122,11 @@ class Scagnostic:
         it = self.edges
 
         for i in it:
-            e = Edge(i)
+            e = i
             if(e.is_new_edge(e.node1)):
-                Node(e.node1).set_neighbor(e)
+                e.node1.set_neighbor(e)
             if(e.is_new_edge(e.node2)):
-                Node(e.node2).set_neighbor(e)
+                e.node2.set_neighbor(e)
     
     def insert(self, px, py, count, id):
         eid = 0
@@ -1143,9 +1136,9 @@ class Scagnostic:
         if(len(self.nodes) < 3):
             return
         if(len(self.nodes) == 3):
-            p1 = Node(self.nodes[0])
-            p2 = Node(self.nodes[1])
-            p3 = Node(self.nodes[2])
+            p1 = self.nodes[0]
+            p2 = self.nodes[1]
+            p3 = self.nodes[2]
 
             e1 = Edge(p1, p2)
 
@@ -1153,8 +1146,8 @@ class Scagnostic:
                 self.nodes.remove(nd)
                 return
             if(e1.on_side(p3) == -1):
-                p1 = Node(self.nodes[0])
-                p2 = Node(self.nodes[1])
+                p1 = self.nodes[0]
+                p2 = self.nodes[1]
                 e1.update(p1, p2)
             
             e2 = Edge(p2, p3)
@@ -1168,7 +1161,7 @@ class Scagnostic:
             self.triangles.append(Triangle(self.edges, e1, e2, e3))
             return
 
-        actE = Edge(self.edges[0])
+        actE = self.edges[0]
 
         if(actE.on_side(nd) == -1):
             if(actE.inverse_edge == None):
@@ -1187,7 +1180,6 @@ class Scagnostic:
         
 
     def expande_triangle(self, e, nd, type):
-        e = Edge(e)
         e1 = e
         e2 = e1.next_edge
         e3 = e2.next_edge
@@ -1201,7 +1193,7 @@ class Scagnostic:
             e20 = Edge(p2, nd)
             e30 = Edge(p3, nd)
 
-            Triangle(e.triangle).remove_edges(self.edges)
+            e.triangle.remove_edges(self.edges)
             self.triangles.remove(e.inverse_edge)
             e100 = e10.make_symm()
             e200 = e20.make_symm()
@@ -1214,7 +1206,7 @@ class Scagnostic:
             self.swap_test(e2)
             self.swap_test(e3)
         else:
-            e4 = Edge(e1.inverse_edge)
+            e4 = e1.inverse_edge
             if(e4 == None or e4.triangle==None):
                 e30 = Edge(p3, nd)
                 e02 = Edge(nd, p2)
@@ -1239,13 +1231,13 @@ class Scagnostic:
                 self.swap_test(e3)
                 self.swap_test(e30)
             else:
-                e5 = Edge(e4.next_edge)
-                e6 = Edge(e5.next_edge)
-                p4 = Node(e6.node1)
-                e10 = Edge(p1, nd)
-                e20 = Edge(p2, nd)
-                e30 = Edge(p3, nd)
-                e40 = Edge(p4, nd)
+                e5 = e4.next_edge
+                e6 = e5.next_edge
+                p4 = e6.node1
+                e10 = p1, nd
+                e20 = p2, nd
+                e30 = p3, nd
+                e40 = p4, nd
                 self.triangles.remove(e4.triangle)
                 e.triangle.removeEdges(self.edges)
                 self.triangles.remove(e4.triangle)
@@ -1272,7 +1264,7 @@ class Scagnostic:
         e3 = None
         enext = Edge()
 
-        e = Edge(self.hull_start)
+        e = self.hull_start
         comedge = None
         lastbe = None
         while(True):
